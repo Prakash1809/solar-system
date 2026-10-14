@@ -7,6 +7,35 @@ Rather than relying on static images or pre-rendered videos, the application mat
 
 ---
 
+## Getting Started
+
+**Requirements:** [Node.js](https://nodejs.org/) 18 or newer and a WebGL-capable browser.
+
+```bash
+npm install      # install React, Three.js, lucide-react and Vite
+npm run dev      # start the dev server at http://localhost:5173 (opens automatically)
+```
+
+Other scripts:
+
+| Command | What it does |
+|---|---|
+| `npm run build` | Production build into `dist/` |
+| `npm run preview` | Serve the production build locally |
+
+**Project layout**
+
+| File | Purpose |
+|---|---|
+| `solar_system_explorer.tsx` | The entire app (scene, shaders, UI) — default-exported `App` component |
+| `src/main.tsx` | Mounts `App` into the page |
+| `index.html` | Page shell; loads Tailwind CSS from its CDN and defines the `animate-fadeIn` animation |
+| `vite.config.js` | Vite + React plugin config |
+
+> Tailwind is loaded via the Play CDN for zero-config setup, so styling needs an internet connection on first load.
+
+---
+
 ## 2. Core Features & What It Does
 
 ### A. Real-Time 3D Celestial Simulation (Orrery)

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
 import {
@@ -1119,6 +1121,7 @@ function SolarSystemViewport({
   const mountRef = useRef(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [labels3D, setLabels3D] = useState([]);
+  const [webglError, setWebglError] = useState(null);
 
   // Live mutable refs so the 60fps requestAnimationFrame loop always reads latest React state
   const stateRef = useRef({
@@ -1218,19 +1221,26 @@ function SolarSystemViewport({
 
   useEffect(() => {
     const container = mountRef.current;
-    if (!container) return;
+    if (!container || typeof window === 'undefined') return;
 
-    const width = container.clientWidth || window.innerWidth;
-    const height = container.clientHeight || window.innerHeight;
+    const width = container.clientWidth || window.innerWidth || 1280;
+    const height = container.clientHeight || window.innerHeight || 720;
+
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance'
+      });
+    } catch (err) {
+      setWebglError('WebGL context could not be initialized on this device or browser.');
+      return;
+    }
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#010308');
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1400);
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance'
-    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.shadowMap.enabled = true;
@@ -1876,13 +1886,21 @@ function SolarSystemViewport({
 
     const handleResize = () => {
       if (!container) return;
-      const w = container.clientWidth || window.innerWidth;
-      const h = container.clientHeight || window.innerHeight;
+      const w = container.clientWidth || window.innerWidth || 1280;
+      const h = container.clientHeight || window.innerHeight || 720;
+      if (w === 0 || h === 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
     window.addEventListener('resize', handleResize);
+
+    // ResizeObserver ensures Vercel / Next.js flex/grid parent containers that mount with 0 height resize immediately
+    let resizeObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => handleResize());
+      resizeObserver.observe(container);
+    }
 
     // 4. Main Animation Loop
     let animationFrameId;
@@ -2097,6 +2115,7 @@ function SolarSystemViewport({
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      if (resizeObserver) resizeObserver.disconnect();
       domElem.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
@@ -2106,6 +2125,17 @@ function SolarSystemViewport({
       renderer.dispose();
     };
   }, []);
+
+  if (webglError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-[#010308] text-slate-200 p-6 text-center">
+        <div className="max-w-md p-6 rounded-2xl bg-slate-900 border border-red-500/30">
+          <p className="text-sm font-bold text-red-400 mb-2">WebGL Initialization Error</p>
+          <p className="text-xs text-slate-400">{webglError}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full">
@@ -2361,10 +2391,10 @@ function ArchitectureModal({ isOpen, onClose }) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">
-                LOCAL PROJECT SETUP & ARCHITECTURE
+                VERCEL DEPLOYMENT & LOCAL SETUP GUIDE
               </h2>
               <p className="text-xs text-slate-400">
-                How to run this React Three Fiber application locally
+                Checklist to deploy cleanly on Vercel with Vite or Next.js
               </p>
             </div>
           </div>
@@ -2377,40 +2407,56 @@ function ArchitectureModal({ isOpen, onClose }) {
         </div>
 
         <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
+          <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/30">
+            <h3 className="text-sm font-semibold text-amber-300 mb-1.5">
+              Why a single App.jsx file fails on Vercel by default
+            </h3>
+            <ul className="list-disc pl-4 space-y-1 text-slate-300">
+              <li>
+                <strong>Uploading only App.jsx:</strong> Vercel requires a full project structure (with a <code>package.json</code>, bundler like Vite or Next.js, and <code>index.html</code>).
+              </li>
+              <li>
+                <strong>Missing dependencies in package.json:</strong> You must list <code>three</code> and <code>lucide-react</code> in <code>dependencies</code> so Vercel’s build server installs them.
+              </li>
+              <li>
+                <strong>Next.js App Router SSR:</strong> If using Next.js (<code>app/page.jsx</code>), <code>"use client";</code> must be at line 1 (now added automatically at the top of this file).
+              </li>
+              <li>
+                <strong>Missing Tailwind CSS:</strong> If the 3D canvas collapses to <code>0px</code> height or buttons look unstyled, add Tailwind CSS or include <code>&lt;script src="https://cdn.tailwindcss.com"&gt;&lt;/script&gt;</code> in your <code>index.html</code>.
+              </li>
+            </ul>
+          </div>
+
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
             <h3 className="text-sm font-semibold text-sky-300 mb-2">
-              1. Quick Start Commands (Vite + React)
+              Option A: Deploy to Vercel with Vite (Recommended)
             </h3>
             <pre className="font-mono text-[11px] text-emerald-300 bg-slate-900/90 p-3 rounded-lg overflow-x-auto">
-{`npm create vite@latest solar-system-explorer -- --template react
+{`# 1. Create a Vite React project
+npm create vite@latest solar-system-explorer -- --template react
 cd solar-system-explorer
+
+# 2. Install required packages (CRITICAL for Vercel build)
 npm install three lucide-react
-npm install -D tailwindcss postcss autoprefixer
-npm run dev`}
+
+# 3. Replace src/App.jsx with this file's code
+# 4. Add Tailwind Play CDN inside index.html <head> (or install tailwindcss):
+# <script src="https://cdn.tailwindcss.com"></script>
+
+# 5. Push to GitHub and import into Vercel (Framework Preset: Vite)`}
             </pre>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
-              <h4 className="font-semibold text-white mb-1">
-                Zero-Dependency Procedural Textures
-              </h4>
-              <p className="text-slate-400">
-                All planetary maps (Earth continents/clouds, Jupiter’s Great Red Spot, Saturn’s
-                Cassini Division rings, Solar granulation) are synthesized dynamically on HTML5
-                2D canvases using multi-octave Fractional Brownian Motion (fBm).
-              </p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
-              <h4 className="font-semibold text-white mb-1">
-                Keplerian Elliptical Orbits
-              </h4>
-              <p className="text-slate-400">
-                Each planet computes true semi-major/semi-minor axes, focal offset{' '}
-                <code>c = a · e</code>, orbital inclination, and axial obliquity (including
-                retrograde Venus and 97.8° sideways Uranus).
-              </p>
-            </div>
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+            <h3 className="text-sm font-semibold text-indigo-300 mb-2">
+              Option B: Deploy to Vercel with Next.js (App Router)
+            </h3>
+            <pre className="font-mono text-[11px] text-emerald-300 bg-slate-900/90 p-3 rounded-lg overflow-x-auto">
+{`npx create-next-app@latest solar-system --tailwind --eslint
+cd solar-system
+npm install three lucide-react
+# Paste this code directly into app/page.js or src/app/page.js`}
+            </pre>
           </div>
         </div>
       </div>
@@ -2501,9 +2547,15 @@ export default function App() {
   }, [handleReturnOverview, tourActive, stepTour]);
 
   return (
-    <div className="relative w-full h-screen bg-[#010308] text-slate-100 overflow-hidden select-none font-sans">
+    <div
+      style={{ width: '100vw', height: '100vh', backgroundColor: '#010308', overflow: 'hidden' }}
+      className="relative w-full h-screen bg-[#010308] text-slate-100 overflow-hidden select-none font-sans"
+    >
       {/* Fullscreen Interactive 3D WebGL Viewport */}
-      <div className="absolute inset-0 z-0">
+      <div
+        style={{ position: 'absolute', inset: 0 }}
+        className="absolute inset-0 z-0"
+      >
         <SolarSystemViewport
           selectedId={selectedId}
           onSelect={handleSelectBody}
